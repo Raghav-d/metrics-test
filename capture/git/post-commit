@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# capture/git/post-commit
+#
+# Git post-commit hook — tool-aware attribution at commit time.
+#
+# Three scenarios this hook handles:
+#
+# 1. Claude Code commit (Co-Authored-By: Claude Code detected)
+#    Runs attribution engine against Claude snapshots captured by
+#    on-tool-result.sh. Tags event with tool: "claude_code".
+#
+# 2. Windsurf commit (Windsurf pre-push already ran for this file)
+#    Skips the file — Windsurf attribution was already recorded at
+#    pre-push time. Avoids double-counting the same lines.
+#
+# 3. Human commit (no AI marker, no Windsurf snapshot)
+#    Records as human contribution. This is the complement signal
+#    that makes AI percentages meaningful.
+#
+# Install path: .git/hooks/post-commit
+
+set -euo pipefail
+
+_dfm_find_engine() {
+  for candidate in \
+    "$HOME/.devflow/engine" \
+    "$HOME/devflow-metrics/engine"; do
+    [[ -f "$candidate/runtime.sh" ]] && echo "$candidate" && return
+  done
+  echo ""
+}
+
+ENGINE_DIR=$(_dfm_find_engine)
+[[ -z "$ENGINE_DIR" ]] && exit 0
+
+source "$ENGINE_DIR/runtime.sh"
+source "$ENGINE_DIR/compute.sh"
+
+REPO_ROOT=$(dfm_repo_root)
+REPO=$(dfm_repo_name)
+BRANCH=$(dfm_active_branch)
+SHORT_SHA=$(dfm_short_sha)
+COMMIT_EMAIL=$(git log -1 --format='%ae' HEAD 2>/dev/null || echo "unknown")
+COMMIT_TS=$(git log    -1 --format='%aI' HEAD 2>/dev/null || dfm_now)
+IS_AI=$(dfm_is_ai_commit HEAD)
+
+SNAP_DIR=$(dfm_snapshot_dir)
+UPSTREAM=$(dfm_best_ref)
+
+CHANGED=$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null || echo "")
+[[ -z "$CHANGED" ]] && exit 0
+
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+while IFS= read -r REL_PATH; do
+  [[ -z "$REL_PATH" ]] && continue
+
+  FULL_PATH="$REPO_ROOT/$REL_PATH"
+  LANGUAGE=$(dfm_detect_language "$REL_PATH")
+  LINE_COUNT=$(dfm_line_count "$FULL_PATH")
+
+  if [[ -f "$FULL_PATH" ]] && \
+     file --mime "$FULL_PATH" 2>/dev/null | grep -qv 'text/'; then
+    continue
+  fi
+
+  rm -f "$WORK"/*
+
+  # Skip files already attributed by Windsurf pre-push hook
+  if [[ "$(dfm_windsurf_already_recorded "$REL_PATH" "$SHORT_SHA")" == "true" ]]; then
+    dfm_log "Skip (Windsurf already recorded): $REL_PATH"
+    continue
+  fi
+
+  if [[ "$IS_AI" == "true" ]]; then
+
+    ESCAPED=$(echo "$REL_PATH" | tr '/' '__' | tr -cd '[:alnum:]_.-')
+    SNAPSHOT=""
+    if [[ -d "$SNAP_DIR" ]]; then
+      SNAPSHOT=$(find "$SNAP_DIR" -name "*__${ESCAPED}.snap" \
+                   -newer "$REPO_ROOT/.git/ORIG_HEAD" 2>/dev/null \
+                 | head -1 || echo "")
+    fi
+
+    CONTRIB_JSON=$(dfm_attribute "$SNAPSHOT" "$UPSTREAM" "$REL_PATH" "$WORK")
+    SIGNAL=$(echo "$CONTRIB_JSON" | python3 -c \
+      "import sys,json; print(json.load(sys.stdin)['signal'])" 2>/dev/null \
+      || echo "marker_only")
+
+    EVENT=$(python3 - <<PYEOF
+import json
+contrib = $CONTRIB_JSON
+print(json.dumps({
+    "version":     "1.0",
+    "kind":        "ai_write",
+    "tool":        "claude_code",
+    "captured_at": "$COMMIT_TS",
+    "engineer":    {"email": "$COMMIT_EMAIL", "session_id": "$SHORT_SHA"},
+    "project":     {"repo": "$REPO", "branch": "$BRANCH", "commit": "$SHORT_SHA"},
+    "file":        {"relative_path": "$REL_PATH", "language": "$LANGUAGE", "line_count": $LINE_COUNT},
+    "contribution": contrib
+}))
+PYEOF
+)
+    dfm_record_event "$EVENT"
+    AI_ADDED=$(echo "$CONTRIB_JSON" | python3 -c \
+      "import sys,json; print(json.load(sys.stdin).get('ai_added',0))" 2>/dev/null || echo 0)
+    dfm_log "Claude: $REL_PATH  +${AI_ADDED} AI lines  [$SIGNAL]"
+
+  else
+
+    dfm_diff_added   "$UPSTREAM" "$REL_PATH" "$WORK/added.txt"
+    dfm_diff_removed "$UPSTREAM" "$REL_PATH" "$WORK/removed.txt"
+    NET_ADDED=$(wc   -l < "$WORK/added.txt"   2>/dev/null | tr -d ' ' || echo 0)
+    NET_REMOVED=$(wc -l < "$WORK/removed.txt" 2>/dev/null | tr -d ' ' || echo 0)
+
+    EVENT=$(python3 - <<PYEOF
+import json
+print(json.dumps({
+    "version":     "1.0",
+    "kind":        "human_commit",
+    "tool":        "human",
+    "captured_at": "$COMMIT_TS",
+    "engineer":    {"email": "$COMMIT_EMAIL", "session_id": "$SHORT_SHA"},
+    "project":     {"repo": "$REPO", "branch": "$BRANCH", "commit": "$SHORT_SHA"},
+    "file":        {"relative_path": "$REL_PATH", "language": "$LANGUAGE", "line_count": $LINE_COUNT},
+    "contribution": {
+        "signal": "human", "quality": "none",
+        "ai_added": 0, "ai_removed": 0,
+        "net_added": $NET_ADDED, "net_removed": $NET_REMOVED
+    }
+}))
+PYEOF
+)
+    dfm_record_event "$EVENT"
+    dfm_log "Human: $REL_PATH  +${NET_ADDED} lines"
+  fi
+
+done <<< "$CHANGED"
+
+exit 0

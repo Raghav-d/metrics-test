@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DevFlow Metrics Event",
+  "description": "Schema v1.0 — a single record representing one file touched during development. Every event, regardless of tool or trigger, conforms to this shape.",
+  "type": "object",
+  "required": ["version", "kind", "captured_at", "engineer", "project", "file", "contribution"],
+
+  "properties": {
+
+    "version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Schema version. Increment minor for additive changes, major for breaking."
+    },
+
+    "kind": {
+      "type": "string",
+      "enum": ["ai_write", "ai_edit", "human_commit"],
+      "description": "What kind of event. ai_write = Claude created a file. ai_edit = Claude modified existing lines. human_commit = engineer committed without AI writing code."
+    },
+
+    "captured_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp when this event was recorded by the hook."
+    },
+
+    "engineer": {
+      "type": "object",
+      "required": ["email"],
+      "properties": {
+        "email":      { "type": "string", "description": "SSO email — the join key across all systems" },
+        "session_id": { "type": "string", "description": "Claude Code session ID for ai_write/ai_edit events" }
+      }
+    },
+
+    "project": {
+      "type": "object",
+      "required": ["repo"],
+      "properties": {
+        "repo":   { "type": "string", "description": "Repository name derived from git root" },
+        "branch": { "type": "string", "description": "Active git branch at capture time" },
+        "commit": { "type": "string", "description": "Short SHA — populated at commit time" }
+      }
+    },
+
+    "file": {
+      "type": "object",
+      "required": ["relative_path"],
+      "properties": {
+        "relative_path": { "type": "string",  "description": "Path relative to repo root — consistent across machines" },
+        "language":      { "type": "string",  "description": "Programming language inferred from extension" },
+        "line_count":    { "type": "integer", "description": "Total lines in file at capture time" }
+      }
+    },
+
+    "contribution": {
+      "type": "object",
+      "required": ["signal", "quality"],
+      "description": "The core attribution data — what changed and how much is attributable to AI.",
+      "properties": {
+
+        "signal": {
+          "type": "string",
+          "enum": ["snapshot_match", "write_count", "marker_only", "human"],
+          "description": "snapshot_match = multiset intersection used (most accurate). write_count = full file write, no prior content to compare. marker_only = inferred from commit trailer only. human = no AI involvement."
+        },
+
+        "quality": {
+          "type": "string",
+          "enum": ["verified", "inferred", "none"],
+          "description": "verified = snapshot was available and used. inferred = commit marker detected but no snapshot. none = human commit."
+        },
+
+        "ai_added":   { "type": "integer", "description": "Lines added that are attributed to AI" },
+        "ai_removed": { "type": "integer", "description": "Lines removed that are attributed to AI" },
+        "net_added":  { "type": "integer", "description": "Total lines added in this change (AI + human)" },
+        "net_removed":{ "type": "integer", "description": "Total lines removed in this change (AI + human)" }
+      }
+    },
+
+    "snapshot_path": {
+      "type": "string",
+      "description": "Path to the raw snapshot file on disk. Internal use only — not for reporting."
+    }
+  }
+}
