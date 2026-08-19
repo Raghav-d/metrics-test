@@ -94,3 +94,92 @@ c. 2-3 sentence narrative on 09/30 schedule risk, referencing only the epics
 
 Do not include file-citation brackets — this is for a leadership-facing 
 document.
+
+--- 
+CONTEXT
+You are analyzing vulnHunter security findings against PI commitments for the 
+Bank Account Acquisition org, target date 09/30. This is a revision pass on 
+prior analysis — apply the corrections below and reconcile against your own 
+earlier output in this thread.
+
+DATA SOURCES
+1. vulnHunter findings export — Finding ID, Issue, Issue URL, Assignee, Owning 
+   Team, Severity, Status, Tagging Labels
+2. PI planning sheet (per-team tabs) — Epic, Capacity (SP), Dependencies, Level 
+   of Commitment
+3. Capacity sheet — Last Q Velocity, This Q Velocity per team
+
+CONFIRMED FACTS (do not re-derive these — treat as given)
+- Severity values that exist in the data: High+, High, Medium, Low, 
+  Informational. "Critical" does NOT exist as a value — do not reference it 
+  anywhere in output, including summary language.
+- Team structure: 3 members per team, 6 sprints per PI, 8 story points per 
+  person per sprint, 10 working days per sprint.
+- Conversion factor: 0.8 SP per person-day (8 points ÷ 10 working days).
+
+STEP A — EXTRACT REAL EFFORT FROM TAGGING LABELS
+The "Tagging Labels" column contains actual estimated effort to fix each 
+finding, provided by the team. Use this as the primary source of remediation 
+effort — do NOT apply a generic severity-based rubric where a labeled effort 
+value exists.
+- Parse the Tagging Labels field for each finding and extract the effort 
+  value. State the format/pattern you find (e.g., "effort:2d", "2 days", 
+  story point tags, etc.) so we can confirm you're reading it correctly.
+- If a finding has no effort tag or the tag is unparseable/ambiguous, flag it 
+  explicitly and fall back to this placeholder rubric ONLY for that finding: 
+  High+ = 4.0 person-days, High = 2.5 person-days, Medium = 1.5, Low = 0.5, 
+  Informational = 0.0.
+- Report what % of High+/High findings had a real effort tag vs. how many 
+  fell back to the placeholder rubric — this tells us how trustworthy the 
+  final number is.
+
+STEP B — FILTER TO COMMITMENT EPICS ONLY
+The PI planning sheet's "Level of Commitment" column includes values such as 
+Commitment, Stretch Goal, and possibly others. Only include epics where Level 
+of Commitment = "Commitment" in all downstream analysis. Exclude Stretch Goals 
+and any other category entirely — do not count their capacity, findings, or 
+schedule risk. State how many epics were excluded and from which teams.
+
+STEP C — RECONCILE DISCREPANCY (do this before final output)
+Your own prior output in this thread showed different Critical/High+/High 
+finding counts than what you are about to produce now. Re-pull raw finding 
+counts by team and severity directly from the current vulnHunter export, 
+state explicitly whether this differs from prior output in this thread, and 
+explain why if so (data changed, findings closed/dispositioned, filter logic 
+changed, or prior error).
+
+STEP D — CHECK FOR ROOT-CAUSE CLUSTERING
+For teams with a high volume of same-severity findings, scan finding 
+descriptions/titles for signs multiple findings share a single root cause 
+(e.g., same missing authorization check repeated across endpoints). Flag this 
+explicitly if likely — even with real effort tags from Step A, clustered 
+findings may be fixable together faster than the sum of individual tags 
+suggests. Do not recalculate — just flag as a risk to estimate accuracy.
+
+STEP E — FINAL OUTPUT (Executive Summary)
+Using only Severity = High+ and High, and only Commitment-level epics (per 
+Step B):
+
+1. One paragraph: total open High+/High findings, total remediation effort in 
+   both person-days and SP (using real Tagging Labels effort per Step A), and 
+   the % of findings that used real tags vs. placeholder fallback.
+
+2. A table: Epic | Team | Level of Commitment | Open High+/High Finding Count | 
+   Remediation Effort (SP) | Remaining Capacity (SP) | Root-Cause Clustering 
+   Risk (Y/N) | Schedule Impact (On Track / At Risk / Likely Slip).
+
+3. 2-3 sentence narrative on 09/30 schedule risk, referencing only Commitment 
+   epics from the table, including cascading dependency risk to teams with 
+   zero direct findings.
+
+4. A "Data Quality Notes" section listing: (a) Tagging Labels parse rate and 
+   format found, (b) discrepancy findings from Step C, (c) excluded 
+   Stretch-Goal epic count from Step B, (d) root-cause clustering flags from 
+   Step D, (e) any other data gaps.
+
+FORMATTING
+- Do not include file-citation brackets — this is for a leadership-facing 
+  document.
+- Do not reference "Critical" severity anywhere.
+- Be conservative — flag assumptions and data gaps rather than presenting 
+  estimates with more confidence than the underlying data supports.
