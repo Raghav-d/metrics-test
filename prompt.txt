@@ -1,0 +1,52 @@
+You are helping to assess schedule risk for a Bank Account 
+Acquisition PI commitment (target: 09/30) caused by security remediation work 
+flagged by an AI-powered scanner called vulnHunter.
+
+I'm providing two data sources:
+1. vulnHunter findings export — columns: Finding ID, Issue, Issue URL, Assignee, 
+   Owning Team, Severity, Status
+2. PI planning Google Sheet — one tab per team (e.g., "Keeshond"), with columns: 
+   Epic, Capacity, Dependencies
+
+The join key between the two sources is Owning Team (vulnHunter) = Team Name 
+(PI sheet tab name).
+
+Do this in order, showing your work at each step:
+
+STEP 0 — Validate the join: List every distinct "Owning Team" value from 
+vulnHunter and every tab name from the PI sheet. Flag any mismatches (spelling, 
+casing, whitespace, abbreviations) that would break an exact-match join, and 
+state how you're resolving each one.
+
+STEP 1 — Triage findings: Group open/unresolved vulnHunter findings (Status != 
+Closed/Resolved/Done) by Owning Team and Severity. For each open finding, 
+estimate remediation effort in person-days: Critical = 3-5 days, High = 2-3 
+days, Medium = 1-2 days, Low = <1 day — unless better effort data exists, in 
+which case use that and say so.
+
+STEP 2 — Per-team rollup: For each team/tab, sum (a) total remediation 
+person-days from open findings, and (b) that team's stated Capacity from the 
+PI sheet. Compute remaining capacity after remediation is absorbed.
+
+STEP 3 — Capacity conflict: For each team, compare committed Epic scope against 
+remaining capacity after remediation. Flag teams where remediation effort 
+meaningfully erodes capacity needed for committed epics.
+
+STEP 4 — Dependency cascade check: For any at-risk team's epics, check the 
+Dependencies column — if other teams' epics depend on an at-risk team's output, 
+flag those as secondary/cascading risk even if their own team isn't directly 
+affected by vulnHunter findings.
+
+STEP 5 — Output a risk register table with columns: Team | Epic(s) | Open 
+Findings (count by severity) | Est. Remediation Effort (person-days) | Stated 
+Capacity | Capacity Conflict (Y/N + detail) | Cascading Risk (which downstream 
+teams/epics) | Schedule Impact (On Track / At Risk / Likely Slip) | Suggested 
+Mitigation (descope, add capacity, parallelize, push to next PI).
+
+STEP 6 — End with a 3-4 sentence executive summary for a leadership update: 
+total open findings, total estimated remediation effort, number of teams/epics 
+at risk of missing 09/30, any cascading dependency risk, and your top 
+recommendation.
+
+Be conservative and flag assumptions rather than inventing numbers not present 
+in the data.
