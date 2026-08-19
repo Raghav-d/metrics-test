@@ -183,3 +183,117 @@ FORMATTING
 - Do not reference "Critical" severity anywhere.
 - Be conservative — flag assumptions and data gaps rather than presenting 
   estimates with more confidence than the underlying data supports.
+
+
+--- 
+CONTEXT
+You are helping a Staff Software Engineer assess business/schedule impact for 
+the Bank Account Acquisition team's PI commitment, target date 09/30. An 
+AI-powered security scanner called vulnHunter has raised findings that require 
+remediation, and I need to understand how this remediation effort affects our 
+committed PI epics.
+
+I'm providing three data sources:
+1. vulnHunter findings export — columns: Finding ID, Issue, Issue URL, 
+   Assignee, Owning Team, Severity, Status, Tagging Labels
+2. PI planning Google Sheet — one tab per team, columns: Epic, Capacity (SP), 
+   Dependencies, Level of Commitment
+3. Capacity sheet — Last Q Velocity, This Q Velocity per team
+
+The join key between vulnHunter and the PI sheet is Owning Team (vulnHunter) = 
+Team Name (PI sheet tab name).
+
+CONFIRMED FACTS (given — do not re-derive)
+- Severity values in the data: High+, High, Medium, Low, Informational. There 
+  is no "Critical" severity — do not use that term anywhere in your output.
+- Each team has 3 members, 6 sprints per PI, 8 story points per person per 
+  sprint, 10 working days per sprint.
+- Conversion factor: 0.8 SP per person-day (8 points ÷ 10 working days) — use 
+  this only where you must fall back to estimated effort (see Step 2).
+
+STEP 0 — VALIDATE THE JOIN
+List every distinct "Owning Team" value from vulnHunter and every tab name 
+from the PI sheet. Flag any mismatches (spelling, casing, whitespace, 
+abbreviations) that would break an exact-match join, and state how you're 
+resolving each one.
+
+STEP 1 — FILTER TO COMMITMENT EPICS ONLY
+The PI planning sheet's "Level of Commitment" column includes values such as 
+Commitment, Stretch Goal, and possibly others. Only include epics where Level 
+of Commitment = "Commitment" in all downstream analysis. Exclude Stretch Goals 
+and any other category entirely. State how many epics were excluded and from 
+which teams.
+
+STEP 2 — EXTRACT REAL EFFORT FROM TAGGING LABELS
+The "Tagging Labels" column in the vulnHunter export contains actual estimated 
+effort to fix each finding, provided by the team. Use this as the primary 
+source of remediation effort.
+- Parse the Tagging Labels field for each finding and extract the effort 
+  value. State the format/pattern you find (e.g., "effort:2d", "2 days", 
+  point tags, etc.) so I can confirm you're reading it correctly.
+- If a finding has no effort tag or the tag is unparseable/ambiguous, flag it 
+  explicitly and fall back to this placeholder rubric ONLY for that finding: 
+  High+ = 4.0 person-days, High = 2.5 person-days, Medium = 1.5, Low = 0.5, 
+  Informational = 0.0.
+- Report what % of High+/High findings had a real effort tag vs. how many 
+  fell back to the placeholder rubric — this determines how trustworthy the 
+  final number is.
+- Where a placeholder rubric value is used, convert to SP using the 0.8 
+  SP/person-day factor. Where a real Tagging Label effort is used, state 
+  whether it's already in SP, days, or another unit, and convert consistently.
+
+STEP 3 — MAP FINDINGS TO COMMITMENT EPICS
+Using the validated team join (Step 0) and the Commitment-only filter 
+(Step 1), tag each open (Status not in Closed/Resolved/Done) High+/High 
+finding to its owning team and associated Commitment epic(s).
+
+STEP 4 — CAPACITY IMPACT
+For each team with Commitment epics:
+- Remediation Effort (SP) = sum of converted effort from Step 2, for open 
+  High+/High findings only
+- Remaining Capacity (SP) = Stated Capacity (SP) − Remediation Effort (SP)
+- Flag any team where Remaining Capacity is negative or remediation consumes 
+  more than 50% of stated capacity as high risk.
+Note: Stated Capacity will not equal the theoretical max of 3 members × 6 
+sprints × 8 pts = 144 SP — this is expected, as Stated Capacity reflects each 
+team's actual adjusted velocity, not a raw headcount calculation. State this 
+once; do not attempt to reconcile it.
+
+STEP 5 — ROOT-CAUSE CLUSTERING CHECK
+For teams with a high volume of same-severity findings, scan finding 
+descriptions/titles for signs multiple findings share a single root cause 
+(e.g., same missing authorization check repeated across endpoints). Flag this 
+explicitly if likely — clustered findings may be fixable together faster than 
+the sum of individual effort tags suggests. Do not recalculate — just flag it.
+
+STEP 6 — DEPENDENCY CASCADE CHECK
+For any at-risk team's Commitment epics, check the Dependencies column — if 
+other teams' Commitment epics depend on an at-risk team's output, flag those 
+as secondary/cascading risk even if the downstream team has no direct 
+vulnHunter findings.
+
+STEP 7 — EXECUTIVE SUMMARY
+Using only Severity = High+ and High, and only Commitment-level epics:
+
+1. One paragraph: total open High+/High findings, total remediation effort in 
+   both person-days and SP, and the % of findings using real Tagging Label 
+   effort vs. placeholder fallback.
+
+2. A table: Epic | Team | Level of Commitment | Open High+/High Finding Count | 
+   Remediation Effort (SP) | Remaining Capacity (SP) | Root-Cause Clustering 
+   Risk (Y/N) | Schedule Impact (On Track / At Risk / Likely Slip).
+
+3. 2-3 sentence narrative on 09/30 schedule risk, referencing only Commitment 
+   epics from the table, including cascading dependency risk identified in 
+   Step 6.
+
+4. A "Data Quality Notes" section covering: (a) join validation issues from 
+   Step 0, (b) excluded Stretch-Goal epic count from Step 1, (c) Tagging 
+   Labels parse rate and format from Step 2, (d) root-cause clustering flags 
+   from Step 5, (e) any other data gaps or assumptions made.
+
+FORMATTING
+- Do not include file-citation brackets (e.g., [cite: filename.csv]).
+- Do not reference "Critical" severity anywhere.
+- Be conservative — flag assumptions and data gaps rather than presenting 
+  estimates with more confidence than the underlying data supports.
