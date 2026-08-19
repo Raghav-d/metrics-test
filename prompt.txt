@@ -297,3 +297,7 @@ FORMATTING
 - Do not reference "Critical" severity anywhere.
 - Be conservative — flag assumptions and data gaps rather than presenting 
   estimates with more confidence than the underlying data supports.
+
+--- Proposal -- 
+Proposal: Automated Security-Impact Risk Tracker for PI Commitments
+Right now, assessing schedule risk from vulnHunter findings against PI commitments is a manual, point-in-time exercise — exporting sheets, cross-referencing by team, and re-running analysis by hand every time data changes. I'd like to build this as a Claude-based skill that connects directly to the vulnHunter dashboard and Jira APIs, so the risk register (findings mapped to Commitment epics, capacity impact, schedule risk) updates automatically and continuously rather than as a one-off snapshot. This turns a multi-hour manual process into something leadership can check anytime, and it's a reusable pattern we could extend to every team in PT, not just Bank Account Acquisition, for every future PI.
