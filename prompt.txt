@@ -50,3 +50,47 @@ recommendation.
 
 Be conservative and flag assumptions rather than inventing numbers not present 
 in the data.
+
+
+---
+Revise the analysis with the following corrections:
+
+CONVERSION FACTOR (apply throughout):
+Each team has 3 members, 6 sprints per PI, and a target rate of 8 story points 
+per person per sprint, with 10 working days per sprint. This yields a 
+conversion factor of 0.8 SP per person-day (8 points ÷ 10 working days).
+
+Use this factor to convert remediation effort from person-days into Story 
+Points: Remediation Effort (SP) = Remediation Effort (person-days) × 0.8
+
+STEP 2/3 — Capacity conflict (revised):
+For each team, compute:
+- Remediation Effort in SP (using the conversion factor above)
+- Remaining Capacity (SP) = Stated Capacity (SP) − Remediation Effort (SP)
+- % of Capacity Consumed by Remediation = Remediation Effort (SP) ÷ Stated 
+  Capacity (SP)
+Flag any team where Remaining Capacity is negative or where remediation 
+consumes more than 50% of stated capacity as high risk.
+
+Note: Stated Capacity (95/156/180/42 SP across teams) does not equal the 
+theoretical max of 3 members × 6 sprints × 8 pts = 144 SP — this is expected, 
+as Stated Capacity reflects each team's actual velocity (adjusted for overhead), 
+not a raw headcount calculation. State this assumption once in your output; 
+do not attempt to reconcile or "correct" the Stated Capacity figures.
+
+STEP 6 — Executive summary (revised):
+Limit this section to Severity = Critical, "High+", and High only (exclude 
+Medium, Low, Informational). First confirm whether "High+" is a distinct 
+severity value present in the raw vulnHunter data or a bucket you created — 
+state this explicitly.
+
+Output:
+a. Total open Critical/High+/High findings and total remediation effort (in 
+   both person-days and converted SP) for this subset only.
+b. A table: Epic | Team | Open Critical/High+/High Finding Count | Remediation 
+   Effort (SP) | Remaining Capacity (SP) | Schedule Impact.
+c. 2-3 sentence narrative on 09/30 schedule risk, referencing only the epics 
+   in the table above.
+
+Do not include file-citation brackets — this is for a leadership-facing 
+document.
