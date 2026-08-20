@@ -301,3 +301,207 @@ FORMATTING
 --- Proposal -- 
 Proposal: Automated Security-Impact Risk Tracker for PI Commitments
 Right now, assessing schedule risk from vulnHunter findings against PI commitments is a manual, point-in-time exercise — exporting sheets, cross-referencing by team, and re-running analysis by hand every time data changes. I'd like to build this as a Claude-based skill that connects directly to the vulnHunter dashboard and Jira APIs, so the risk register (findings mapped to Commitment epics, capacity impact, schedule risk) updates automatically and continuously rather than as a one-off snapshot. This turns a multi-hour manual process into something leadership can check anytime, and it's a reusable pattern we could extend to every team in PT, not just Bank Account Acquisition, for every future PI.
+
+CONTEXT
+You are helping a Staff Software Engineer assess business/schedule impact for 
+teams under Eric's org (Bank Account Acquisition and related teams) for PI 
+commitments targeting 09/30. An AI-powered security scanner called vulnHunter 
+has raised findings requiring remediation, and this org uses THREE DIFFERENT 
+PI planning sheet formats across different director-level leaders. This 
+analysis will be shared with all three leads and may inform whether Eric 
+needs to notify Executive+ about schedule risk. Detect and handle each format 
+correctly before combining results, and be conservative — this output needs 
+to hold up to scrutiny from multiple leaders reviewing it.
+
+DATA SOURCES
+1. vulnHunter findings export — columns: Finding ID, Issue, Issue URL, 
+   Assignee, Owning Team, Severity, Status, Tagging Labels
+2. One or more PI planning sheets, in any of these three formats (detect 
+   which applies to each sheet/tab you're given — see Step 0)
+3. Possible separate capacity/velocity sheet(s)
+
+CONFIRMED FACTS (given — do not re-derive)
+- Severity values in vulnHunter data: High+, High, Medium, Low, Informational. 
+  There is no "Critical" severity — do not use that term anywhere in output.
+- Standard team structure (where applicable): 3 members, 6 sprints per PI, 8 
+  story points per person per sprint, 10 working days per sprint.
+- Conversion factor: 0.8 SP per person-day — use only when falling back to 
+  placeholder effort estimates (Step 3).
+
+STEP 0 — DETECT PI PLANNING FORMAT PER SHEET
+For each PI planning sheet/tab provided, identify which format it matches:
+
+- FORMAT A ("Team-Tab / Capacity-Commitment"): one tab per team; columns 
+  include Epic, Capacity (SP), Dependencies, Level of Commitment.
+
+- FORMAT B ("Pod-Objective / Multi-Quarter"): single sheet; columns include 
+  Pod, Objective, Intent Name, Primary KR, Team(s), Status, Target Delivery 
+  Date, Quarter/Horizon. The Team(s) column may list multiple team names in 
+  one row.
+
+- FORMAT C ("Split Capacity+Commitment"): two separate sheets — a Capacity 
+  sheet (Team, Area, PI Velocity with a date range, Q3 Velocity with a date 
+  range, Source) and a Commitments sheet (Team, Epic only). Treat every row 
+  in the Commitments sheet as a commitment — there is no stretch-goal 
+  distinction in this format.
+
+State which format each provided sheet/tab matches. If any sheet doesn't 
+cleanly match one of these three, describe its actual columns and STOP to ask 
+me rather than guessing how to handle it.
+
+STEP 1 — NORMALIZE EACH FORMAT INTO A COMMON SCHEMA
+Extract every format into this common record structure: Team | Epic/Objective 
+| Level of Commitment | Capacity Available (SP or "Not Available") | Target 
+Date (if present) | Dependencies (if present) | Format Source (A/B/C).
+
+FORMAT A: Filter to Level of Commitment = "Commitment" only (exclude Stretch 
+Goal and any other category). Capacity = that team's Capacity (SP) value.
+
+FORMAT B: If the Team(s) column contains multiple team names in one row 
+(comma/semicolon separated), split into one record per team so each can be 
+joined individually against vulnHunter's Owning Team. Include rows where 
+Quarter/Horizon contains Q2'26 and/or Q3'26 (both are in scope — Q2 
+commitments are targeted to wrap up this month, so they still carry live 
+schedule risk). There is no Capacity (SP) data in this format — set Capacity 
+Available to "Not Available." Level of Commitment is not applicable — set to 
+"N/A" and do not exclude any rows on that basis.
+
+FORMAT C: Join the Commitments sheet (Team, Epic) to the Capacity sheet on 
+Team. Use "Q3 Velocity (7/1-9/30)" as the primary Capacity figure, since its 
+date range aligns with the 09/30 target. Also report the "PI Velocity" figure 
+(different date range) alongside it, and explicitly flag if the two diverge 
+significantly rather than silently choosing one.
+
+STEP 2 — VALIDATE JOIN KEYS
+List distinct Team values across all normalized records and compare against 
+vulnHunter's Owning Team values. Flag spelling/casing/whitespace mismatches 
+and state how each is resolved. Since three different leaders may use 
+inconsistent or overlapping team naming, flag any team name that appears 
+ambiguous or could plausibly belong to more than one leader's org.
+
+STEP 3 — EXTRACT REAL EFFORT FROM TAGGING LABELS
+The "Tagging Labels" column in vulnHunter contains actual estimated effort to 
+fix each finding. Use this as the primary effort source.
+- Parse the field and state the format/pattern found (e.g. "effort:2d", 
+  point tags, etc.).
+- Where no usable tag exists, fall back per-finding to: High+ = 4.0 
+  person-days, High = 2.5 person-days (convert to SP at 0.8 SP/day only for 
+  fallback values).
+- Report % of High+/High findings using real tags vs. placeholder fallback.
+
+STEP 4 — MAP FINDINGS TO NORMALIZED RECORDS
+Using the validated team join (Step 2), tag each open (Status not in 
+Closed/Resolved/Done) High+/High finding to its normalized Team/Epic record(s) 
+from Step 1.
+
+STEP 5 — CAPACITY / SCHEDULE IMPACT (branches by data availability)
+For records with Capacity Available (Format A and C): compute Remediation 
+Effort (SP), Remaining Capacity (SP) = Capacity − Remediation Effort. Flag 
+negative Remaining Capacity or >50% consumption as high risk. Label this 
+basis as "Capacity-derived."
+
+For records without Capacity data (Format B): do NOT compute an SP-based 
+capacity number. Instead, make a qualitative Schedule Impact judgment based 
+on: proximity of Target Delivery Date to today and to 09/30, volume/effort of 
+open High+/High findings for that team, and the row's existing Status value. 
+Label this basis as "Qualitative" so it's never confused with the SP-based 
+method used elsewhere.
+
+STEP 6 — ROOT-CAUSE CLUSTERING CHECK
+For teams with a high volume of same-severity findings, scan finding 
+descriptions/titles for signs of a shared root cause (e.g. same missing 
+authorization check repeated across endpoints). Flag if likely — this means 
+actual effort may be lower than the sum of individual effort tags suggests. 
+Do not recalculate, just flag it.
+
+STEP 7 — DEPENDENCY CASCADE CHECK
+Where a Dependencies column exists (Format A), check if other teams' 
+Commitment epics depend on an at-risk team's output and flag cascading risk. 
+Format B/C records have no Dependencies column — skip and note as a data gap 
+rather than assuming no dependencies exist.
+
+STEP 8 — ESCALATION DETERMINATION
+Capacity is fungible across teams under Eric's org, but only through a direct 
+conversation between the three Pod/PL leads — surplus capacity does not 
+auto-transfer. Determine escalation status as follows:
+
+A. ORG-WIDE NET CAPACITY (Format A and C teams only — these have real SP data):
+   - Sum Remaining Capacity (SP) across all Format A and Format C teams/records 
+     (this can include negative values from at-risk teams and positive values 
+     from teams with slack).
+   - If the org-wide net sum is >= 0: capacity shortfall is theoretically 
+     ABSORBABLE within Eric's org through reallocation. Status = "Manageable 
+     within Eric's org (requires PL coordination)."
+   - If the org-wide net sum is negative: the shortfall EXCEEDS what reallocation 
+     across Eric's org can cover. Status = "Escalate to Executive+."
+
+B. RECOMMENDED REALLOCATION PAIRINGS (only if Status A = Manageable):
+   List which specific teams have positive Remaining Capacity (surplus) and 
+   which have negative Remaining Capacity (deficit), paired by rough magnitude, 
+   as a starting point for the PL conversation (e.g., "Shiba has +142.4 SP 
+   surplus; Courage has -2.6 SP deficit — Shiba could plausibly absorb 
+   Courage's shortfall"). Do not assume skill/domain compatibility — note that 
+   the PLs must confirm whether the surplus team's engineers can actually work 
+   in the deficit team's codebase/domain before this is treated as a real plan.
+   
+   Label this entire subsection explicitly in the output text itself (not just 
+   in surrounding narrative) as: "DRAFT — starting point only, not a 
+   commitment. Requires confirmation from all three PLs before this can be 
+   treated as an actual mitigation plan."
+
+C. FORMAT B (QUALITATIVE) TEAMS — HANDLE SEPARATELY:
+   Format B records have no SP data and cannot be included in the org-wide net 
+   sum in Step A. For any Format B record flagged "Likely Slip" or "At Risk" 
+   in Step 5, list it separately under a heading "Cannot be netted — requires 
+   manual capacity judgment," since there's no quantitative basis to include 
+   it in the reallocation math. Do not silently exclude these from the 
+   escalation conversation just because they lack SP data — flag them as an 
+   open question for Eric to assess directly.
+
+D. TIMING CAVEAT (state this explicitly regardless of Status A result):
+   A "Manageable within Eric's org" determination is a mathematical statement 
+   only — it assumes the three PLs actually agree to reallocate, which has 
+   NOT been confirmed as of this analysis. If a real-time PL agreement cannot 
+   be reached before Eric's own reporting deadline, the practical 
+   recommendation may need to default toward raising visibility to 
+   Executive+ as a precaution, even if the underlying math technically closes. 
+   State this distinction clearly: "mathematically manageable" is not the 
+   same as "confirmed manageable in time."
+
+STEP 9 — EXECUTIVE SUMMARY
+Using only Severity = High+ and High:
+
+1. One paragraph: total open High+/High findings across all formats combined, 
+   total remediation effort (person-days and SP), % using real Tagging Label 
+   effort vs. placeholder, and a one-line note on how many teams/records fell 
+   under each format (A/B/C).
+
+2. A unified table: Team | Epic/Objective | Format Source (A/B/C) | Level of 
+   Commitment | Open High+/High Finding Count | Remediation Effort (SP) | 
+   Capacity Available (Y/N) | Remaining Capacity (SP or "N/A") | Schedule 
+   Impact | Basis (Capacity-derived / Qualitative).
+
+3. 2-3 sentence narrative on 09/30 schedule risk across the org, clearly 
+   distinguishing capacity-derived risk from qualitative risk, and any 
+   cascading dependency risk identified in Step 7.
+
+4. An "Escalation Recommendation" section stating: the org-wide net capacity 
+   position (Step 8A), the Status determination (Manageable / Escalate to 
+   Executive+), the reallocation pairings if applicable — clearly marked DRAFT 
+   per Step 8B, any Format B teams requiring separate manual judgment (Step 8C), 
+   and the timing caveat (Step 8D). This should read as a clear, one-line 
+   bottom-line Eric can act on.
+
+5. A "Data Quality Notes" section covering: (a) format detection results per 
+   sheet, (b) join validation issues and ambiguous team names from Step 2, 
+   (c) Tagging Labels parse rate from Step 3, (d) root-cause clustering flags, 
+   (e) any Format B qualitative-basis caveats, (f) any Format C velocity 
+   divergence flagged in Step 1, (g) any other data gaps or assumptions.
+
+FORMATTING
+- Do not include file-citation brackets.
+- Do not reference "Critical" severity anywhere.
+- Be conservative — flag assumptions and data gaps rather than presenting 
+  estimates with more confidence than the underlying data supports.
+- Never blend Capacity-derived and Qualitative schedule-impact judgments 
+  without clearly labeling which is which.
