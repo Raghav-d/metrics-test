@@ -731,3 +731,23 @@ FORMATTING
   alone is safe, but always pair it with the word "deficit" once nearby so 
   meaning is unambiguous even in plain text. Never begin any cell value with 
   "=".
+
+-- Follow up
+Three follow-ups on the analysis:
+
+1. Revise the Escalation Status logic: add a distinct status "No Action 
+   Needed" for the case where every team independently has positive 
+   Remaining Capacity (no team is in deficit) — reserve "Manageable within 
+   Eric's org (requires PL coordination)" only for cases where at least one 
+   team is in deficit and needs surplus from another team. Re-state the 
+   Status Determination using this corrected logic.
+
+2. Confirm explicitly: was vulnHunter's "Owning Team" column present and 
+   used directly for the Apply Org Planning join, or was team assignment 
+   inferred from repository naming conventions (e.g., sbao-beluga -> 
+   Courage)? If inferred, state your confidence in that mapping and flag any 
+   repo names that couldn't be confidently mapped to a team.
+
+3. Where a finding has effort values in both "Tagging Labels" and "Est. LOE" 
+   columns, state which one took precedence and why, and confirm whether any 
+   findings had conflicting values between the two.
