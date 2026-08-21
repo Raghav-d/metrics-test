@@ -751,3 +751,30 @@ Three follow-ups on the analysis:
 3. Where a finding has effort values in both "Tagging Labels" and "Est. LOE" 
    columns, state which one took precedence and why, and confirm whether any 
    findings had conflicting values between the two.
+
+-- second follow up
+
+Run a sensitivity check on the ambiguous repository mappings flagged in your 
+prior response (sbao-ui-dynamodb-sync, sbao-web-cloudfront-infra, 
+sbao-sbb-consent-api, sbao-sbb-consent-ui, and any others not shown in the 
+truncated list — please list the complete set of flagged/ambiguous repos now).
+
+For each ambiguous repo, identify every plausible alternate team it could 
+belong to (not just the one you currently assigned it to).
+
+Then compute a WORST-CASE scenario: reassign each ambiguous finding's effort 
+to whichever plausible team has the LOWEST current Remaining Capacity, one 
+at a time (do not double-count a finding across multiple teams). Recalculate 
+Remaining Capacity for any affected team under this worst-case reassignment.
+
+State clearly: does the "No Action Needed" determination still hold under 
+this worst-case scenario, or does any team flip to negative Remaining 
+Capacity? If any team flips negative, name it and state the new Escalation 
+Status per the existing logic (No Action Needed / Manageable via reallocation 
+/ Escalate to Executive+).
+
+Separately, flag this as a "Data Quality Notes" item: this run's vulnHunter 
+export lacked a direct Owning Team column, unlike other exports used earlier 
+in this analysis, requiring repo-name inference instead of a direct join. 
+Recommend this be raised as a process gap — future vulnHunter exports should 
+include a stable team-ownership field to avoid inference-based attribution.
