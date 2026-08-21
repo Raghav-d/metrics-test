@@ -797,3 +797,242 @@ spelling/casing/whitespace mismatches and state how each is resolved. Flag
 any Owning Team value that has no matching Team record anywhere in the PI 
 planning data (this may indicate a team not currently tracked in PI planning, 
 which is worth surfacing on its own).
+
+-- 08/21
+CONTEXT
+You are helping a Staff Software Engineer assess business/schedule impact for 
+teams under Eric's org (Bank Account Acquisition and related teams) for PI 
+commitments targeting 09/30. An AI-powered security scanner called vulnHunter 
+has raised findings requiring remediation, and this org uses THREE DIFFERENT 
+PI planning sheet formats across different director-level leaders. This 
+analysis will be shared with all three leads and may inform whether Eric 
+needs to notify Executive+ about schedule risk. Detect and handle each format 
+correctly before combining results, and be conservative — this output needs 
+to hold up to scrutiny from multiple leaders reviewing it.
+
+DATA SOURCES
+1. vulnHunter findings export — columns: Finding ID, Issue, Issue URL, 
+   Assignee, Owning Team, Severity, Status, Tagging Labels, Est. LOE. The 
+   Owning Team column was manually added by the requester based on direct 
+   application/domain knowledge (pulled from the vulnHunter dashboard per 
+   team, then combined) — treat it as ground truth. Do NOT attempt to infer 
+   or override team ownership from repository names under any circumstances.
+2. One or more PI planning sheets, in any of these three formats (detect 
+   which applies to each sheet/tab you're given — see Step 0)
+3. Possible separate capacity/velocity sheet(s)
+
+CONFIRMED FACTS (given — do not re-derive)
+- Severity values in vulnHunter data: High+, High, Medium, Low, Informational. 
+  There is no "Critical" severity — do not use that term anywhere in output.
+- Standard team structure (where applicable): 3 members, 6 sprints per PI, 8 
+  story points per person per sprint, 10 working days per sprint.
+- Conversion factor: 0.8 SP per person-day — use only when falling back to 
+  placeholder effort estimates (Step 3).
+
+STEP 0 — DETECT PI PLANNING FORMAT PER SHEET
+For each PI planning sheet/tab provided, identify which format it matches, 
+and refer to it going forward by its planning group label (not "Format A/B/C"):
+
+- "Apply Org Planning": one tab per team; columns include Epic, Capacity (SP), 
+  Dependencies, Level of Commitment.
+
+- "Bank Onboarding Roadmap": single sheet; columns include Pod, Objective, 
+  Intent Name, Primary KR, Team(s), Status, Target Delivery Date, 
+  Quarter/Horizon. The Team(s) column may list multiple team names in one row.
+
+- "Bank Tech Decisioning": two separate sheets — a Capacity sheet (Team, Area, 
+  PI Velocity with a date range, Q3 Velocity with a date range, Source) and a 
+  Commitments sheet (Team, Epic only). Treat every row in the Commitments 
+  sheet as a commitment — there is no stretch-goal distinction in this format.
+
+State which planning group label each provided sheet/tab matches. If any 
+sheet doesn't cleanly match one of these three, describe its actual columns 
+and STOP to ask me rather than guessing how to handle it.
+
+STEP 1 — NORMALIZE EACH FORMAT INTO A COMMON SCHEMA
+Extract every format into this common record structure: Team | Epic/Objective 
+| Level of Commitment | Capacity Available (SP or "Not Available") | Target 
+Date (if present) | Dependencies (if present) | Planning Group (Apply Org 
+Planning / Bank Onboarding Roadmap / Bank Tech Decisioning).
+
+Apply Org Planning: Filter to Level of Commitment = "Commitment" only 
+(exclude Stretch Goal and any other category). Capacity = that team's 
+Capacity (SP) value.
+
+Bank Onboarding Roadmap: If the Team(s) column contains multiple team names 
+in one row (comma/semicolon separated), split into one record per team so 
+each can be joined individually against vulnHunter's Owning Team. Include 
+rows where Quarter/Horizon contains Q2'26 and/or Q3'26 (both are in scope — 
+Q2 commitments are targeted to wrap up this month, so they still carry live 
+schedule risk). There is no Capacity (SP) data in this format — set Capacity 
+Available to "Not Available." Level of Commitment is not applicable — set to 
+"N/A" and do not exclude any rows on that basis.
+
+Bank Tech Decisioning: Join the Commitments sheet (Team, Epic) to the 
+Capacity sheet on Team. Use "Q3 Velocity (7/1-9/30)" as the primary Capacity 
+figure, since its date range aligns with the 09/30 target. Also report the 
+"PI Velocity" figure (different date range) alongside it, and explicitly flag 
+if the two diverge significantly rather than silently choosing one.
+
+STEP 2 — VALIDATE JOIN KEYS
+The vulnHunter findings export includes a manually-curated Owning Team 
+column, added by the requester based on direct application/domain knowledge — 
+treat this as ground truth. Do NOT perform repository-name inference or 
+override this value with your own guess, even if a repo name suggests a 
+different team.
+
+List every distinct Owning Team value in the vulnHunter export and every 
+distinct Team value across all normalized PI planning records. Flag any 
+spelling/casing/whitespace mismatches and state how each is resolved. Flag 
+any Owning Team value with no matching Team record anywhere in the PI 
+planning data — this may indicate a team not currently tracked in PI 
+planning, which is worth surfacing on its own rather than silently dropping.
+
+STEP 3 — EXTRACT REAL EFFORT FROM TAGGING LABELS / EST. LOE
+vulnHunter findings may carry effort estimates in either the "Tagging Labels" 
+or "Est. LOE" column (or both). Use this precedence: Tagging Labels takes 
+priority over Est. LOE, since Tagging Labels contains more granular, 
+explicitly triaged engineering estimates. Use Est. LOE only when Tagging 
+Labels is empty or unparseable for that finding.
+- Parse effort values and state the format/pattern found (e.g. "effort:2d", 
+  "Estimated LOE less than 1 Sprint", etc.).
+- Where a finding has values in both columns, state whether they agree or 
+  conflict — do not silently pick one without checking.
+- Where no usable value exists in either column, fall back per-finding to: 
+  High+ = 4.0 person-days, High = 2.5 person-days (convert to SP at 0.8 
+  SP/day only for fallback values).
+- Report % of High+/High findings using real tagged/LOE effort vs. 
+  placeholder fallback.
+
+STEP 4 — MAP FINDINGS TO NORMALIZED RECORDS
+Using the validated team join (Step 2), tag each open (Status not in 
+Closed/Resolved/Done) High+/High finding to its normalized Team/Epic record(s) 
+from Step 1, using the ground-truth Owning Team value.
+
+STEP 5 — CAPACITY / SCHEDULE IMPACT (branches by data availability)
+For records with Capacity Available (Apply Org Planning and Bank Tech 
+Decisioning): compute Remediation Effort (SP), Remaining Capacity (SP) = 
+Capacity − Remediation Effort. Flag negative Remaining Capacity or >50% 
+consumption as high risk. Label this basis as "Capacity-derived."
+
+For records without Capacity data (Bank Onboarding Roadmap): do NOT compute 
+an SP-based capacity number. Instead, make a qualitative Schedule Impact 
+judgment based on: proximity of Target Delivery Date to today and to 09/30, 
+volume/effort of open High+/High findings for that team, and the row's 
+existing Status value. Label this basis as "Qualitative" so it's never 
+confused with the SP-based method used elsewhere.
+
+STEP 6 — ROOT-CAUSE CLUSTERING CHECK
+For teams with a high volume of same-severity findings, scan finding 
+descriptions/titles for signs of a shared root cause (e.g. same missing 
+authorization check repeated across endpoints, or shared CWE category). Flag 
+if likely — this means actual effort may be lower than the sum of individual 
+effort tags suggests. Do not recalculate, just flag it.
+
+STEP 7 — DEPENDENCY CASCADE CHECK
+Where a Dependencies column exists (Apply Org Planning), check if other 
+teams' Commitment epics depend on an at-risk team's output and flag cascading 
+risk. Bank Onboarding Roadmap / Bank Tech Decisioning records have no 
+Dependencies column — skip and note as a data gap rather than assuming no 
+dependencies exist.
+
+STEP 8 — ESCALATION DETERMINATION
+Capacity is fungible across teams under Eric's org, but only through a direct 
+conversation between the Pod/PL leads — surplus capacity does not 
+auto-transfer. Determine escalation status using this three-tier logic:
+
+- "No Action Needed": every team independently has positive Remaining 
+  Capacity (no team is in deficit).
+- "Manageable within Eric's org (requires PL coordination)": at least one 
+  team is in deficit, but the org-wide sum of Remaining Capacity (across 
+  Apply Org Planning and Bank Tech Decisioning records only) is >= 0, meaning 
+  surplus elsewhere could theoretically cover it.
+- "Escalate to Executive+": the org-wide sum of Remaining Capacity is 
+  negative — the shortfall exceeds what reallocation across Eric's org can 
+  cover.
+
+A. ORG-WIDE NET CAPACITY: Sum Remaining Capacity (SP) across all Apply Org 
+   Planning and Bank Tech Decisioning records, and state the resulting Status 
+   per the three-tier logic above.
+
+B. RECOMMENDED REALLOCATION PAIRINGS (only relevant if Status is "Manageable 
+   within Eric's org"): List which specific teams have positive Remaining 
+   Capacity (surplus) and which have negative Remaining Capacity (deficit), 
+   paired by rough magnitude, as a starting point for the PL conversation.
+   
+   Immediately alongside each pairing, state this caveat inline: "This 
+   pairing is based on capacity/SP surplus only and does not account for 
+   domain expertise, prior codebase familiarity, or ramp-up time. A team with 
+   less numeric surplus but existing familiarity with the deficit team's 
+   domain may be able to contribute faster and more effectively than this 
+   pairing suggests — the PLs are better positioned to judge actual fit than 
+   this capacity math."
+   
+   Label this entire subsection explicitly as: "DRAFT — starting point only, 
+   not a commitment. Requires confirmation from all PLs before this can be 
+   treated as an actual mitigation plan."
+
+C. BANK ONBOARDING ROADMAP (QUALITATIVE) RECORDS — HANDLE SEPARATELY:
+   These records have no SP data and cannot be included in the org-wide net 
+   sum in Step A. For any such record flagged "Likely Slip" or "At Risk" in 
+   Step 5, list it separately under "Requires manual review — no capacity 
+   data available," phrased as a recommendation: "Recommend Eric or the 
+   Onboarding pod lead assess actual engineering bandwidth for these 
+   initiatives directly, since no story-point capacity data exists to 
+   quantify this risk."
+
+D. TIMING CAVEAT (state this explicitly if Status is "Manageable within 
+   Eric's org"): A "Manageable within Eric's org" determination is a 
+   mathematical statement only — it assumes the relevant PLs actually agree 
+   to reallocate, which has NOT been confirmed as of this analysis. If a 
+   real-time PL agreement cannot be reached before Eric's own reporting 
+   deadline, the practical recommendation may need to default toward raising 
+   visibility to Executive+ as a precaution, even if the underlying math 
+   technically closes.
+
+STEP 9 — EXECUTIVE SUMMARY
+Using only Severity = High+ and High:
+
+1. One paragraph: total open High+/High findings across all planning groups 
+   combined, total remediation effort (person-days and SP), % using real 
+   tagged/LOE effort vs. placeholder, and a one-line note on how many 
+   teams/records fell under each planning group.
+
+2. A unified table: Team | Epic/Objective | Planning Group | Level of 
+   Commitment | Open High+/High Finding Count | Remediation Effort (SP) | 
+   Capacity Available (Y/N) | Remaining Capacity (SP or "N/A") | Schedule 
+   Impact | Basis (Capacity-derived / Qualitative).
+
+3. 2-3 sentence narrative on 09/30 schedule risk across the org, clearly 
+   distinguishing capacity-derived risk from qualitative risk, and any 
+   cascading dependency risk identified in Step 7.
+
+4. An "Escalation Recommendation" section stating: the org-wide net capacity 
+   position (Step 8A), the Status determination (No Action Needed / 
+   Manageable / Escalate to Executive+), the reallocation pairings with the 
+   talent-fit caveat inline per Step 8B (if applicable), any Bank Onboarding 
+   Roadmap records requiring separate manual review (Step 8C), and the timing 
+   caveat (Step 8D, if applicable). This should read as a clear, one-line 
+   bottom-line Eric can act on.
+
+5. A "Data Quality Notes" section covering: (a) format detection results per 
+   sheet, (b) join validation issues from Step 2 (confirm Owning Team was 
+   used as ground truth, not inferred), (c) effort parse rate and any 
+   Tagging Labels/Est. LOE conflicts from Step 3, (d) root-cause clustering 
+   flags, (e) any Bank Onboarding Roadmap qualitative-basis caveats, (f) any 
+   Bank Tech Decisioning velocity divergence, (g) any other data gaps or 
+   assumptions.
+
+FORMATTING
+- Do not include file-citation brackets.
+- Do not reference "Critical" severity anywhere.
+- Be conservative — flag assumptions and data gaps rather than presenting 
+  estimates with more confidence than the underlying data supports.
+- Never blend Capacity-derived and Qualitative schedule-impact judgments 
+  without clearly labeling which is which.
+- NUMBER FORMATTING — CRITICAL: This output will be copied directly into 
+  Google Sheets. Never format any numeric value with a leading "+" or "=" 
+  sign (e.g., do NOT write "+12.6 SP" or "=+12.6 SP"), since Sheets will 
+  misinterpret this as a broken formula and display #ERROR!. For surplus 
+  values, write "12.6 SP surplus" instead of "+12.6 SP". For deficits, write 
+  "-12.6 SP" or "12.6 SP deficit". Never begin any cell value with "=".
