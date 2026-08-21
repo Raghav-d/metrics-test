@@ -778,3 +778,22 @@ export lacked a direct Owning Team column, unlike other exports used earlier
 in this analysis, requiring repo-name inference instead of a direct join. 
 Recommend this be raised as a process gap — future vulnHunter exports should 
 include a stable team-ownership field to avoid inference-based attribution.
+
+--clear up
+STEP 0 — DETECT PI PLANNING FORMAT PER SHEET (unchanged from before — see full 
+prompt)
+
+STEP 2 — VALIDATE JOIN KEYS
+The vulnHunter findings export now includes a manually-curated "Owning Team" 
+column (added by the requester based on direct application/domain knowledge, 
+not inferred from repository naming). Treat this Owning Team value as ground 
+truth — do NOT attempt repo-name inference or override it with your own 
+guess, even if a repo name suggests a different team.
+
+List every distinct Owning Team value in the vulnHunter export and compare 
+against every Team value across all normalized PI planning records (Apply 
+Org Planning / Bank Onboarding Roadmap / Bank Tech Decisioning). Flag any 
+spelling/casing/whitespace mismatches and state how each is resolved. Flag 
+any Owning Team value that has no matching Team record anywhere in the PI 
+planning data (this may indicate a team not currently tracked in PI planning, 
+which is worth surfacing on its own).
